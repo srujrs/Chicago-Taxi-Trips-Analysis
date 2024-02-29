@@ -1,0 +1,60 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+taxi <- read.csv("Taxi_Trips__2024.csv")
+```
+
+```{r}
+head(taxi)
+```
+
+```{r}
+print(names(taxi))
+print(nrow(taxi))
+```
+
+```{r}
+colSums(is.na(taxi))
+```
+## visualizations to show what these companies shift their focus towards like payment type and impact of extras
+## try to answer how taxi companies can try gain marketshare
+## convert the timestamp column into an integer value for the hour of the day
+## Role Segregation - visualization EDA preprocessing - feature engineering - modelling - conclusion
+
+```{r}
+(unique(taxi$Company))
+```
+
+```{r}
+feature_desc <- read.csv("Taxi_Trips_2024_Feature_descriptions.csv")
+feature_desc
+```
+
+```{r}
+notes <- list()
+for (feature in names(taxi)) {
+  
+  curr_note <- paste("Valid rows:",(nrow(taxi) - sum(is.na(taxi[,feature]))),
+                     "; N/A rows:", sum(is.na(taxi[,feature])),
+                     "; Unique values:", length(unique(taxi[,feature])))
+  notes <- append(notes, curr_note)
+}
+notes
+```
+
+```{r}
+feature_desc$Notes <- unlist(notes)
+feature_desc
+```
+
+```{r}
+
+```
+
