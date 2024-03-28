@@ -1,49 +1,50 @@
 ---
-title: "R Notebook"
-output: html_notebook
+title: "CSP-571 Project Spring 24"
+author: "Kyung Jin Kwak (kkwak4@hawk.iit.edu), Srujan Ramesh (sramesh19@hawk.iit.edu)"
+output: 
+  html_notebook:
+    toc: yes
+    toc_float: yes
+  html_document:
+    toc: yes
+    df_print: paged
 ---
-
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
-
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
-
+ 
+## Loading & Checking Data
 ```{r}
-taxi <- read.csv("Taxi_Trips__2024.csv")
+taxi_df <- read.csv("../taxi_Trips__2024.csv")
 ```
 
 ```{r}
-head(taxi)
+head(taxi_df)
 ```
 
 ```{r}
-print(names(taxi))
-print(nrow(taxi))
+print(names(taxi_df))
+print(nrow(taxi_df))
 ```
 
 ```{r}
-colSums(is.na(taxi))
-```
-## visualizations to show what these companies shift their focus towards like payment type and impact of extras
-## try to answer how taxi companies can try gain marketshare
-## convert the timestamp column into an integer value for the hour of the day
-## Role Segregation - visualization EDA preprocessing - feature engineering - modelling - conclusion
-
-```{r}
-(unique(taxi$Company))
+colSums(is.na(taxi_df))
 ```
 
 ```{r}
-feature_desc <- read.csv("Taxi_Trips_2024_Feature_descriptions.csv")
+(unique(taxi_df$Company))
+```
+
+## Understanding the features
+```{r}
+feature_desc <- read.csv("taxi_Trips_2024_Feature_descriptions.csv")
 feature_desc
 ```
 
 ```{r}
 notes <- list()
-for (feature in names(taxi)) {
+for (feature in names(taxi_df)) {
   
-  curr_note <- paste("Valid rows:",(nrow(taxi) - sum(is.na(taxi[,feature]))),
-                     "; N/A rows:", sum(is.na(taxi[,feature])),
-                     "; Unique values:", length(unique(taxi[,feature])))
+  curr_note <- paste("Valid rows:",(nrow(taxi_df) - sum(is.na(taxi_df[,feature]))),
+                     "; N/A rows:", sum(is.na(taxi_df[,feature])),
+                     "; Unique values:", length(unique(taxi_df[,feature])))
   notes <- append(notes, curr_note)
 }
 notes
@@ -55,6 +56,60 @@ feature_desc
 ```
 
 ```{r}
+# Install the formattable package if not already installed
+if (!require(formattable)) {
+  install.packages("formattable")
+}
 
+# Load the formattable package
+library(formattable)
+
+# Pretty print the table with color
+formattable(feature_desc, align = c("l", "l", "l", "l"), list(Notes = formatter("span", style = "color:blue"), Type = formatter("span", style = "color:green"))
+)
+
+```
+
+```{r}
+length(which(taxi_df$Fare + taxi_df$Tips + taxi_df$Tolls + taxi_df$Extras != taxi_df$Trip.Total))
+```
+
+## Data Cleaning
+
+### Dropping unwanted features
+```{r}
+features_to_drop <- c("Trip.End.Timestamp", "Pickup.Census.Tract", "Dropoff.Census.Tract", "Pickup.Centroid.Latitude", "Pickup.Centroid.Longitude", "Pickup.Centroid.Location", "Dropoff.Centroid.Latitude", "Dropoff.Centroid.Longitude", "Dropoff.Centroid..Location")
+
+simplified_taxi_df <- subset(taxi_df, select = -c(Trip.End.Timestamp, Pickup.Census.Tract, Dropoff.Census.Tract, Pickup.Centroid.Latitude, Pickup.Centroid.Longitude, Pickup.Centroid.Location, Dropoff.Centroid.Latitude, Dropoff.Centroid.Longitude, Dropoff.Centroid..Location))
+head(simplified_taxi_df)
+```
+
+### Removing Null rows
+```{r}
+colSums(is.na(simplified_taxi_df))
+```
+
+```{r}
+cleaned_taxi_df <- simplified_taxi_df[!apply(is.na(simplified_taxi_df), 1, any), ]
+colSums(is.na(cleaned_taxi_df))
+```
+
+### Converting seconds to mins
+```{r}
+cleaned_taxi_df$Trip.Minutes <- round(cleaned_taxi_df$Trip.Seconds / 60, digits = 2) 
+cleaned_taxi_df$Trip.Seconds <- NULL 
+head(cleaned_taxi_df)
+```
+
+### Converting timestamp to hour of the day & day of the week
+```{r}
+cleaned_taxi_df$Trip.Start.Timestamp <- as.POSIXct(cleaned_taxi_df$Trip.Start.Timestamp, format = "%m/%d/%Y %I:%M:%S %p")
+
+cleaned_taxi_df$Trip.Hour.Of.The.Day <- as.integer(format(cleaned_taxi_df$Trip.Start.Timestamp, format = "%H"))
+
+days_of_week <- c("Sunday" = 1, "Monday" = 2, "Tuesday" = 3, "Wednesday" = 4, "Thursday" = 5, "Friday" = 6, "Saturday" = 7)
+cleaned_taxi_df$Trip.Day.Of.The.Week <- as.integer(days_of_week[weekdays(cleaned_taxi_df$Trip.Start.Timestamp)])
+
+head(cleaned_taxi_df)
 ```
 
