@@ -19,7 +19,7 @@ library(knitr)
 
 ## Loading & Checking Data
 ```{r}
-taxi_df <- read.csv("taxi_Trips__2024.csv")
+taxi_df <- read.csv("../taxi_Trips__2024.csv")
 ```
 
 ```{r}
@@ -119,6 +119,7 @@ cleaned_taxi_df$Trip.Start.Timestamp <- as.POSIXct(cleaned_taxi_df$Trip.Start.Ti
 cleaned_taxi_df$Trip.Start.Date <- as.Date(cleaned_taxi_df$Trip.Start.Timestamp)
 
 cleaned_taxi_df$Trip.Hour.Of.The.Day <- as.integer(format(cleaned_taxi_df$Trip.Start.Timestamp, format = "%H"))
+cleaned_taxi_df$Trip.Hour.Of.The.Day <- as.factor(cleaned_taxi_df$Trip.Hour.Of.The.Day)
 
 days_of_week <- c("Sunday" = 1, "Monday" = 2, "Tuesday" = 3, "Wednesday" = 4, "Thursday" = 5, "Friday" = 6, "Saturday" = 7)
 cleaned_taxi_df$Trip.Day.Of.The.Week <- as.integer(days_of_week[weekdays(cleaned_taxi_df$Trip.Start.Timestamp)])
@@ -359,6 +360,26 @@ trip_total_by_Company <- cleaned_taxi_df %>%
 kable(trip_total_by_Company)
 ```
 
+#### 7) Trip.Total by time in a day
+```{r}
+# Summarise Trip.Total by Company and arrange by TotalRevenue in descending order
+trip_total_by_time <- cleaned_taxi_df %>%
+  group_by(Trip.Hour.Of.The.Day) %>%
+  summarise(TotalRevenue = sum(Trip.Total), .groups = 'drop') %>%
+  arrange(desc(TotalRevenue))
+
+ggplot(trip_total_by_time, aes(x = Trip.Hour.Of.The.Day, y = TotalRevenue, fill = TotalRevenue)) +
+  geom_col() +
+  labs(title = "Trips total by time in a day",
+       x = "Time",
+       y = "Trips total") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none") + # This line removes the legend
+  scale_fill_gradient(low = "lightblue", high = "blue") # This line adds a color gradient from light blue to blue
+```
+
+
 #### 7) Trips Count by Paymeny type
 ```{r}
 # Summarise Trip id by Payment Type
@@ -409,6 +430,26 @@ trip_count_by_Company <- cleaned_taxi_df %>%
 kable(trip_count_by_Company)
 ```
 
+#### 10) Trips Count by time in a day
+```{r}
+# Summarise Trip.Total by Company and arrange by TotalRevenue in descending order
+trip_count_by_time <- cleaned_taxi_df %>%
+  group_by(Trip.Hour.Of.The.Day) %>%
+  summarise(TripCount = n_distinct(Trip.ID), .groups = 'drop') %>%
+  arrange(desc(TripCount))
+
+ggplot(trip_count_by_time, aes(x = Trip.Hour.Of.The.Day, y = TripCount, fill = TripCount)) +
+  geom_col() +
+  labs(title = "Trips Count by time in a day",
+       x = "Time",
+       y = "Trip Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none") + # This line removes the legend
+  scale_fill_gradient(low = "lightblue", high = "blue") # This line adds a color gradient from light blue to blue
+```
+
+
 Some Key Findings from EDA
 
 1. Total taxi fare correlates with original fare, trip miles, tips, where does not correlates with tolls and trip hours of the day.
@@ -422,4 +463,6 @@ Some Key Findings from EDA
 5. The most popular Dropoff area are '8, 32, 28'.
 
 6. Top 5 most frequently used taxi companies in Chicago are Flash Cab, Taxi Affiliation Services, Sun Taxi, Taxicab Insurance Agency Llc, and City Service.
+
+7. The peak time for using taxi is 4pm~5pm. But by the taxi fare, the peak time is 3pm~7pm.
 
