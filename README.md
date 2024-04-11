@@ -18,17 +18,21 @@ Train your clustering model on the dataset:
 
 If using K-means, determine the optimal number of clusters using methods like the elbow method or silhouette score.
 Fit the model to the data and label each customer into a segment.
+
 7. Evaluation and Interpretation
 Evaluate the clustering output:
 
 Analyze the characteristics of each cluster. For example, one cluster might represent frequent, short-trip customers, while another might represent infrequent but long-distance travelers.
 Validate the coherence of clusters using metrics like silhouette scores.
+
+
 8. Actionable Insights and Strategy Development
 Develop strategies based on the segments:
 
 Tailored marketing: Offer promotions based on segment-specific preferences and behaviors.
 Service adjustments: Modify service offerings to better meet the needs of each segment.
 Pricing strategy: Implement dynamic pricing models based on segment sensitivity.
+
 9. Iteration
 Regularly update the segmentation as new data comes in and as customer behaviors change. This might involve retraining the model periodically or adjusting the number of clusters.
 
