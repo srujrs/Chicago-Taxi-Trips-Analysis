@@ -9,15 +9,21 @@ output:
     toc: yes
     toc_float: yes
 ---
+
 ## Install necessary libraries
+
 ```{r}
 library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(knitr)
+library(formattable)
+library(randomForest)
+library(leaps)
 ```
 
 ## Loading & Checking Data
+
 ```{r}
 taxi_df <- read.csv("../taxi_Trips__2024.csv")
 ```
@@ -26,10 +32,7 @@ taxi_df <- read.csv("../taxi_Trips__2024.csv")
 head(taxi_df)
 ```
 
-```{r}tlsg
-print(names(taxi_df))
-print(nrow(taxi_df))
-```
+`{r}tlsg print(names(taxi_df)) print(nrow(taxi_df))`
 
 ```{r}
 colSums(is.na(taxi_df))
@@ -40,6 +43,7 @@ colSums(is.na(taxi_df))
 ```
 
 ## Understanding the features
+
 ```{r}
 feature_desc <- read.csv("taxi_Trips_2024_Feature_descriptions.csv")
 feature_desc
@@ -68,10 +72,6 @@ if (!require(formattable)) {
   install.packages("formattable")
 }
 
-# Load the formattable package
-library(formattable)
-
-# Pretty print the table with color
 formattable(feature_desc, align = c("l", "l", "l", "l"), list(Notes = formatter("span", style = "color:blue"), Type = formatter("span", style = "color:green"))
 )
 
@@ -81,9 +81,10 @@ formattable(feature_desc, align = c("l", "l", "l", "l"), list(Notes = formatter(
 length(which(taxi_df$Fare + taxi_df$Tips + taxi_df$Tolls + taxi_df$Extras != taxi_df$Trip.Total))
 ```
 
-## Data Cleaning
+## 1. Data Cleaning
 
-### Dropping unwanted features
+### 1.1 Dropping unwanted features
+
 ```{r}
 features_to_drop <- c("Trip.End.Timestamp", "Pickup.Census.Tract", "Dropoff.Census.Tract", "Pickup.Centroid.Latitude", "Pickup.Centroid.Longitude", "Pickup.Centroid.Location", "Dropoff.Centroid.Latitude", "Dropoff.Centroid.Longitude", "Dropoff.Centroid..Location")
 
@@ -91,7 +92,8 @@ simplified_taxi_df <- subset(taxi_df, select = -c(Trip.End.Timestamp, Pickup.Cen
 head(simplified_taxi_df)
 ```
 
-### Removing Null rows
+### 1.2 Removing Null rows
+
 ```{r}
 dim(simplified_taxi_df)
 colSums(is.na(simplified_taxi_df))
@@ -104,17 +106,25 @@ dim(cleaned_taxi_df)
 head(cleaned_taxi_df)
 ```
 
-### Converting seconds to mins
+### 1.3 Converting seconds to mins
+
 ```{r}
 cleaned_taxi_df$Trip.Minutes <- round(cleaned_taxi_df$Trip.Seconds / 60, digits = 2) 
 cleaned_taxi_df$Trip.Seconds <- NULL 
 head(cleaned_taxi_df)
 ```
 
-### Converting timestamp to hour of the day & day of the week
+### 1.4 Converting timestamp to hour of the day & day of the week
+
 ```{r}
 cleaned_taxi_df$Trip.Start.Timestamp <- as.POSIXct(cleaned_taxi_df$Trip.Start.Timestamp, 
-                                                    format = "%m/%d/%y %H:%M")
+                                                    format = "%m/%d/%Y %I:%M:%S %p")
+
+# ---------------------------------------------------------------------------------
+# If you are facing any errors with the format used above, try using the one below 
+# ---------------------------------------------------------------------------------
+# cleaned_taxi_df$Trip.Start.Timestamp <- as.POSIXct(cleaned_taxi_df$Trip.Start.Timestamp, format = "%m/%d/%y %H:%M")
+
 
 cleaned_taxi_df$Trip.Start.Date <- as.Date(cleaned_taxi_df$Trip.Start.Timestamp)
 
@@ -127,7 +137,8 @@ cleaned_taxi_df$Trip.Day.Of.The.Week <- as.factor(cleaned_taxi_df$Trip.Day.Of.Th
 head(cleaned_taxi_df)
 ```
 
-### Convert datatype of payment type
+### 1.5 Convert datatype of payment type
+
 ```{r}
 cleaned_taxi_df$Payment.Type <- as.factor(cleaned_taxi_df$Payment.Type)
 cleaned_taxi_df$Company <- as.factor(cleaned_taxi_df$Company)
@@ -135,15 +146,15 @@ cleaned_taxi_df$Taxi.ID <- as.factor(cleaned_taxi_df$Taxi.ID)
 head(cleaned_taxi_df)
 ```
 
+### 1.6 Convert datatype of community area to string
 
-### Convert datatype of community area to string
 ```{r}
 cleaned_taxi_df$Pickup.Community.Area <- as.factor(cleaned_taxi_df$Pickup.Community.Area)
 cleaned_taxi_df$Dropoff.Community.Area <- as.factor(cleaned_taxi_df$Dropoff.Community.Area)
 ```
 
+### 1.7 Check dimension and summary of the cleaned dataset
 
-### Check dimension and summary of the cleaned dataset
 ```{r}
 dim(cleaned_taxi_df)
 names(cleaned_taxi_df)
@@ -151,10 +162,17 @@ summary(cleaned_taxi_df)
 head(cleaned_taxi_df)
 ```
 
+```{r}
+saveRDS(cleaned_taxi_df, "taxi_df_data_cleaning.rds")
+```
+
+
 ## 2. Exploratory Data Analysis
+
 ### 2.1 Check and remove rows that has outliers
 
 ```{r}
+cleaned_taxi_df <- readRDS("taxi_df_data_cleaning.rds")
 attach(cleaned_taxi_df)
 ```
 
@@ -162,6 +180,7 @@ attach(cleaned_taxi_df)
 hist(Trip.Total, breaks = 50, main = "Histogram of Total fare", xlab = "Total Fare")
 summary(Trip.Total)
 ```
+
 Looking at the histogram and the boxplot, there are some extreme values that hinders accuracy of our future model, hence needs to be removed.
 
 ```{r}
@@ -182,11 +201,13 @@ outliers <- is.outlier(Trip.Total)
 ```
 
 number of outliers
+
 ```{r}
 sum(outliers)
 ```
 
 Remove all the rows that are outliers of Trip.Total
+
 ```{r}
 cleaned_taxi_df <- cleaned_taxi_df[!outliers, ]
 dim(cleaned_taxi_df)
@@ -214,7 +235,7 @@ summary(cleaned_taxi_df$Trip.Total)
 ```{r}
 boxplot(cleaned_taxi_df[, c('Fare','Tips','Tolls','Extras','Trip.Total')])
 ```
- 
+
 ### 2.3 Heatmap of correlation of each features
 
 ```{r}
@@ -235,11 +256,13 @@ ggplot(cor_data, aes(Var1, Var2, fill = Freq)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   ggtitle("Correlation Matrix Heatmap")
 ```
+
 Trip.Total is in high correlation relationship with 'Fare, Trip.Miles, Tips', but almost no relationship with 'Tolls, Hour of the trip'
 
 ### 2.4 Other data exploration
 
 #### 1) Average Number of Trips per Taxi in a Day Over Time
+
 ```{r}
 
 # Generate a sequence of dates within the range of your data
@@ -269,6 +292,7 @@ plot + geom_vline(data = weekend_dates, aes(xintercept = as.numeric(Date)), colo
 ```
 
 #### 2) Total Trips Over Time
+
 ```{r}
 # First, calculate the total trips per day
 total_trips_over_time <- cleaned_taxi_df %>%
@@ -286,9 +310,11 @@ total_trips_plot <- ggplot(total_trips_over_time, aes(x = Trip.Start.Date, y = T
 # Add vertical lines for weekends
 total_trips_plot + geom_vline(data = weekend_dates, aes(xintercept = as.numeric(Date)), color = "red", linetype = "dashed")
 ```
+
 We can see that people tends not to use taxi on weekends than weekdays.
 
 #### 3) Pickup and Dropoff Area Count - Overlaid Histogram
+
 ```{r fig.width=14, fig.height=7}
 # Create a long format data frame for pickup and dropoff areas
 area_data <- tidyr::pivot_longer(
@@ -311,6 +337,7 @@ ggplot(area_data, aes(x = as.factor(Area), fill = AreaType)) +
 ```
 
 #### 4) Trip.Total by Payment Type
+
 ```{r}
 # Summarise Trip.Total by Payment Type
 trip_total_by_PaymentType <- cleaned_taxi_df %>%
@@ -328,6 +355,7 @@ ggplot(trip_total_by_PaymentType, aes(x = Payment.Type, y = TotalRevenue, fill =
 ```
 
 #### 5) Trip.Total by Day of the week
+
 ```{r}
 trip_total_by_DayoftheWeek <- cleaned_taxi_df %>%
   group_by(Trip.Day.Of.The.Week) %>%
@@ -349,6 +377,7 @@ ggplot(trip_total_by_DayoftheWeek, aes(x = Trip.Day.Of.The.Week, y = TotalRevenu
 ```
 
 #### 6) Trip.Total by Company
+
 ```{r}
 # Summarise Trip.Total by Company and arrange by TotalRevenue in descending order
 trip_total_by_Company <- cleaned_taxi_df %>%
@@ -361,6 +390,7 @@ kable(trip_total_by_Company)
 ```
 
 #### 7) Trip.Total by time in a day
+
 ```{r}
 # Summarise Trip.Total by Company and arrange by TotalRevenue in descending order
 trip_total_by_time <- cleaned_taxi_df %>%
@@ -379,8 +409,8 @@ ggplot(trip_total_by_time, aes(x = Trip.Hour.Of.The.Day, y = TotalRevenue, fill 
   scale_fill_gradient(low = "lightblue", high = "blue") # This line adds a color gradient from light blue to blue
 ```
 
-
 #### 7) Trips Count by Paymeny type
+
 ```{r}
 # Summarise Trip id by Payment Type
 trip_count_by_PaymentType <- cleaned_taxi_df %>%
@@ -398,6 +428,7 @@ ggplot(trip_count_by_PaymentType, aes(x = Payment.Type, y = TripCount, fill = Pa
 ```
 
 #### 8) Trips Count by day of the week
+
 ```{r}
 trip_count_by_DayoftheWeek <- cleaned_taxi_df %>%
   group_by(Trip.Day.Of.The.Week) %>%
@@ -419,6 +450,7 @@ ggplot(trip_count_by_DayoftheWeek, aes(x = Trip.Day.Of.The.Week, y = TripCount, 
 ```
 
 #### 9) Trips Count by Company
+
 ```{r}
 # Summarise Trip.Total by Company and arrange by TotalRevenue in descending order
 trip_count_by_Company <- cleaned_taxi_df %>%
@@ -431,6 +463,7 @@ kable(trip_count_by_Company)
 ```
 
 #### 10) Trips Count by time in a day
+
 ```{r}
 # Summarise Trip.Total by Company and arrange by TotalRevenue in descending order
 trip_count_by_time <- cleaned_taxi_df %>%
@@ -449,20 +482,78 @@ ggplot(trip_count_by_time, aes(x = Trip.Hour.Of.The.Day, y = TripCount, fill = T
   scale_fill_gradient(low = "lightblue", high = "blue") # This line adds a color gradient from light blue to blue
 ```
 
+```{r}
+detach(cleaned_taxi_df)
+saveRDS(cleaned_taxi_df, "taxi_df_EDA.rds")
+```
+
 
 Some Key Findings from EDA
 
-1. Total taxi fare correlates with original fare, trip miles, tips, where does not correlates with tolls and trip hours of the day.
+1.  Total taxi fare correlates with original fare, trip miles, tips, where does not correlates with tolls and trip hours of the day.
 
-2. People tends to use taxi on weekdays (especially on Wed > Tue > Mon), but not on weenkends.
+2.  People tends to use taxi on weekdays (especially on Wed \> Tue \> Mon), but not on weenkends.
 
-3. Majority of people use Credit Card then Cash to pay the taxi fare.
+3.  Majority of people use Credit Card then Cash to pay the taxi fare.
 
-4. The most popular Pickup area are '8, 76, 32, 28'.
+4.  The most popular Pickup area are '8, 76, 32, 28'.
 
-5. The most popular Dropoff area are '8, 32, 28'.
+5.  The most popular Dropoff area are '8, 32, 28'.
 
-6. Top 5 most frequently used taxi companies in Chicago are Flash Cab, Taxi Affiliation Services, Sun Taxi, Taxicab Insurance Agency Llc, and City Service.
+6.  Top 5 most frequently used taxi companies in Chicago are Flash Cab, Taxi Affiliation Services, Sun Taxi, Taxicab Insurance Agency Llc, and City Service.
 
-7. The peak time for using taxi is 4pm~5pm. But by the taxi fare, the peak time is 3pm~7pm.
+7.  The peak time for using taxi is 4pm\~5pm. But by the taxi fare, the peak time is 3pm\~7pm.
 
+## 3. Model Selection
+
+### 3.1 Feature Selection using Random Forests
+
+```{r}
+cleaned_taxi_df <- readRDS("taxi_df_EDA.rds")
+```
+
+```{r}
+features_to_drop <- c('Trip.ID', 'Taxi.ID', 'Trip.Start.Timestamp', 'Trip.Start.Date', 'Payment.Type', 'Company', 'Tips', 'Tolls', 'Extras', 'Trip.Total')
+selected_taxi_df <- cleaned_taxi_df %>% select(-one_of(features_to_drop))
+
+factor_columns <- sapply(selected_taxi_df, is.factor)
+selected_taxi_df[factor_columns] <- sapply(selected_taxi_df[factor_columns], function(x) as.numeric(levels(x))[x])
+
+head(selected_taxi_df)
+```
+
+```{r}
+set.seed(123)
+
+sample_size <- floor(0.5 * nrow(selected_taxi_df))
+sample_indices <- sample(seq_len(nrow(selected_taxi_df)), size=sample_size)
+
+random_forest <- randomForest(Fare ~ ., data = selected_taxi_df[sample_indices, ], importance = TRUE, ntree = 25)
+importance(random_forest)
+```
+
+### 3.2 Feature Selection using Best Subset Selection
+
+```{r}
+regfit.full <- regsubsets(Fare ~ ., data = selected_taxi_df)
+summary(regfit.full)
+```
+
+
+### 3. Fare prediction using Splines
+
+```{r}
+
+```
+
+### 3. Fare prediction using SVM
+
+```{r}
+
+```
+
+### 3. Tip chances using Distance Trees
+
+```{r}
+
+```
