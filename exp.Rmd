@@ -20,6 +20,9 @@ library(knitr)
 library(formattable)
 library(randomForest)
 library(leaps)
+library(splines)
+library(caret)
+library(glmnet)
 ```
 
 ## Loading & Checking Data
@@ -245,13 +248,12 @@ cor_matrix <- cor(cleaned_taxi_df[, numeric_columns], use = "complete.obs")
 
 print(cor_matrix)
 
-# Convert the correlation matrix to a long format for ggplot2
 cor_data <- as.data.frame(as.table(cor_matrix))
 
-# Create a heatmap with ggplot2
 ggplot(cor_data, aes(Var1, Var2, fill = Freq)) +
-  geom_tile() +
-  scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0, limit = c(-1,1)) +
+  geom_tile() +  # This creates the heatmap boxes
+  geom_text(aes(label = sprintf("%.2f", Freq)), vjust = 1, color = "black", size = 3) +  # Adjust size as needed
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0, limit = c(-1, 1)) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   ggtitle("Correlation Matrix Heatmap")
@@ -264,7 +266,6 @@ Trip.Total is in high correlation relationship with 'Fare, Trip.Miles, Tips', bu
 #### 1) Average Number of Trips per Taxi in a Day Over Time
 
 ```{r}
-
 # Generate a sequence of dates within the range of your data
 date_range <- seq(min(cleaned_taxi_df$Trip.Start.Date), max(cleaned_taxi_df$Trip.Start.Date), by = "day")
 
@@ -288,27 +289,36 @@ plot <- ggplot(average_trips_per_taxi, aes(x = Trip.Start.Date, y = AvgTrips)) +
 
 # Add vertical lines for weekends
 plot + geom_vline(data = weekend_dates, aes(xintercept = as.numeric(Date)), color = "red", linetype = "dashed")
- 
 ```
 
 #### 2) Total Trips Over Time
 
 ```{r}
+label_thousands <- function(x) {
+  paste0(x / 1000, "k")
+}
+
+library(scales)
+
 # First, calculate the total trips per day
 total_trips_over_time <- cleaned_taxi_df %>%
   group_by(Trip.Start.Date) %>%
   summarise(TotalTrips = n(), .groups = 'drop')
 
-# Plot the total trips over time
 total_trips_plot <- ggplot(total_trips_over_time, aes(x = Trip.Start.Date, y = TotalTrips)) +
   geom_line() +
+  scale_y_continuous(labels = label_thousands) +
   labs(title = "Total Trips Over Time",
        x = "Date",
-       y = "Total Trips") +
+       y = "Total Trips (in thousands)") +
   theme_minimal()
 
-# Add vertical lines for weekends
-total_trips_plot + geom_vline(data = weekend_dates, aes(xintercept = as.numeric(Date)), color = "red", linetype = "dashed")
+# Assuming weekend_dates is a vector that contains the dates of weekends
+total_trips_plot <- total_trips_plot +
+  geom_vline(data = data.frame(Date = weekend_dates), aes(xintercept = as.numeric(Date)),
+             color = "red", linetype = "dashed")
+
+print(total_trips_plot)
 ```
 
 We can see that people tends not to use taxi on weekends than weekdays.
@@ -318,27 +328,32 @@ We can see that people tends not to use taxi on weekends than weekdays.
 ```{r fig.width=14, fig.height=7}
 # Create a long format data frame for pickup and dropoff areas
 area_data <- tidyr::pivot_longer(
-  cleaned_taxi_df, 
-  cols = c("Pickup.Community.Area", "Dropoff.Community.Area"), 
-  names_to = "AreaType", 
+  cleaned_taxi_df,
+  cols = c("Pickup.Community.Area", "Dropoff.Community.Area"),
+  names_to = "AreaType",
   values_to = "Area"
 )
 
 # Plot overlaid bar charts for pickup and dropoff area counts
 ggplot(area_data, aes(x = as.factor(Area), fill = AreaType)) +
-  geom_bar(position = "identity", alpha = 0.5) +  # Set alpha for transparency
-  scale_fill_manual(values = c("Pickup.Community.Area" = "blue", "Dropoff.Community.Area" = "red")) +
+  geom_bar(position = "identity", alpha = 0.5) + # Set alpha for transparency
+  scale_y_continuous(labels = label_thousands) + # Format y-axis labels
   labs(title = "Overlaid Bar Chart of Pickup and Dropoff Area Counts",
        x = "Area Code",
        y = "Count") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) 
-
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_fill_manual(values = c("Pickup.Community.Area" = "blue", "Dropoff.Community.Area" = "red"))
 ```
 
 #### 4) Trip.Total by Payment Type
 
 ```{r}
+# Define a custom label function for y axis to display in millions
+label_millions <- function(x) {
+  paste0(formatC(x / 1e6, format = "f", digits = 1), "M")
+}
+
 # Summarise Trip.Total by Payment Type
 trip_total_by_PaymentType <- cleaned_taxi_df %>%
   group_by(Payment.Type) %>%
@@ -347,11 +362,12 @@ trip_total_by_PaymentType <- cleaned_taxi_df %>%
 # Create a bar plot of Trip Total by Payment Type
 ggplot(trip_total_by_PaymentType, aes(x = Payment.Type, y = TotalRevenue, fill = Payment.Type)) +
   geom_col() +  # This creates a bar chart with pre-summarized data
-  labs(title = "Trip Total by Payment Type",
+  scale_y_continuous(labels = label_millions) + # Use the custom label function for millions
+  labs(title = "Taxi Fare by Payment Type",
        x = "Payment Type",
-       y = "Total Revenue") +
+       y = "Taxi Fare") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none")
 ```
 
 #### 5) Trip.Total by Day of the week
@@ -369,24 +385,23 @@ day_names <- c("1" = "Sunday", "2" = "Monday", "3" = "Tuesday", "4" = "Wednesday
 ggplot(trip_total_by_DayoftheWeek, aes(x = Trip.Day.Of.The.Week, y = TotalRevenue, fill = Trip.Day.Of.The.Week)) +
   geom_col() +
   scale_x_discrete(labels = day_names) +  # Use the day_names vector for axis labels
+  scale_y_continuous(labels = label_millions) +
   labs(title = "Trip Total by Day of the Week",
        x = " ",
        y = "Total Revenue") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none")
 ```
 
 #### 6) Trip.Total by Company
 
 ```{r}
-# Summarise Trip.Total by Company and arrange by TotalRevenue in descending order
 trip_total_by_Company <- cleaned_taxi_df %>%
   group_by(Company) %>%
-  summarise(TotalRevenue = sum(Trip.Total), .groups = 'drop') %>%
+  summarise(TotalRevenue = sum(Trip.Total) / 1e6, .groups = 'drop') %>%
   arrange(desc(TotalRevenue))
 
-# Display the full table sorted by Total Revenue
-kable(trip_total_by_Company)
+kable(trip_total_by_Company, digits = 2, col.names = c("Company", "Total Revenue (Millions $)"))
 ```
 
 #### 7) Trip.Total by time in a day
@@ -400,13 +415,14 @@ trip_total_by_time <- cleaned_taxi_df %>%
 
 ggplot(trip_total_by_time, aes(x = Trip.Hour.Of.The.Day, y = TotalRevenue, fill = TotalRevenue)) +
   geom_col() +
+  scale_y_continuous(labels = label_thousands) +
   labs(title = "Trips total by time in a day",
        x = "Time",
        y = "Trips total") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.position = "none") + # This line removes the legend
-  scale_fill_gradient(low = "lightblue", high = "blue") # This line adds a color gradient from light blue to blue
+        legend.position = "none") +
+  scale_fill_gradient(low = "lightblue", high = "blue") 
 ```
 
 #### 7) Trips Count by Paymeny type
@@ -419,12 +435,13 @@ trip_count_by_PaymentType <- cleaned_taxi_df %>%
 
 # Create a bar plot of Trip Total by Payment Type
 ggplot(trip_count_by_PaymentType, aes(x = Payment.Type, y = TripCount, fill = Payment.Type)) +
-  geom_col() +  # This creates a bar chart with pre-summarized data
+  geom_col() +
+  scale_y_continuous(labels = label_thousands) +
   labs(title = "Trips Count by Paymeny type",
        x = "Payment Type",
        y = "Trip Count") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") 
 ```
 
 #### 8) Trips Count by day of the week
@@ -441,12 +458,13 @@ day_names <- c("1" = "Sunday", "2" = "Monday", "3" = "Tuesday", "4" = "Wednesday
 # Create the bar plot, using the named vector for axis labels
 ggplot(trip_count_by_DayoftheWeek, aes(x = Trip.Day.Of.The.Week, y = TripCount, fill = Trip.Day.Of.The.Week)) +
   geom_col() +
-  scale_x_discrete(labels = day_names) +  # Use the day_names vector for axis labels
+  scale_x_discrete(labels = day_names) + 
+  scale_y_continuous(labels = label_thousands) +
   labs(title = "Trip Count by Day of the Week",
        x = " ",
        y = "Trip Count") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none")
 ```
 
 #### 9) Trips Count by Company
@@ -455,11 +473,11 @@ ggplot(trip_count_by_DayoftheWeek, aes(x = Trip.Day.Of.The.Week, y = TripCount, 
 # Summarise Trip.Total by Company and arrange by TotalRevenue in descending order
 trip_count_by_Company <- cleaned_taxi_df %>%
   group_by(Company) %>%
-  summarise(TripCount = n_distinct(Trip.ID), .groups = 'drop') %>%
+  summarise(TripCount = n_distinct(Trip.ID) / 1e3 , .groups = 'drop') %>%
   arrange(desc(TripCount))
 
 # Display the full table sorted by Total Revenue
-kable(trip_count_by_Company)
+kable(trip_count_by_Company, digits=2, col.names = c("Company", "Trips Count (In Thousands)"))
 ```
 
 #### 10) Trips Count by time in a day
@@ -473,13 +491,14 @@ trip_count_by_time <- cleaned_taxi_df %>%
 
 ggplot(trip_count_by_time, aes(x = Trip.Hour.Of.The.Day, y = TripCount, fill = TripCount)) +
   geom_col() +
+  scale_y_continuous(labels = label_thousands) +
   labs(title = "Trips Count by time in a day",
        x = "Time",
        y = "Trip Count") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.position = "none") + # This line removes the legend
-  scale_fill_gradient(low = "lightblue", high = "blue") # This line adds a color gradient from light blue to blue
+        legend.position = "none") + 
+  scale_fill_gradient(low = "lightblue", high = "blue")
 ```
 
 ```{r}
@@ -492,7 +511,7 @@ Some Key Findings from EDA
 
 1.  Total taxi fare correlates with original fare, trip miles, tips, where does not correlates with tolls and trip hours of the day.
 
-2.  People tends to use taxi on weekdays (especially on Wed \> Tue \> Mon), but not on weenkends.
+2.  People tends to use taxi on weekdays (especially on Wed > Tue > Mon), but not on weekends.
 
 3.  Majority of people use Credit Card then Cash to pay the taxi fare.
 
@@ -502,7 +521,7 @@ Some Key Findings from EDA
 
 6.  Top 5 most frequently used taxi companies in Chicago are Flash Cab, Taxi Affiliation Services, Sun Taxi, Taxicab Insurance Agency Llc, and City Service.
 
-7.  The peak time for using taxi is 4pm\~5pm. But by the taxi fare, the peak time is 3pm\~7pm.
+7.  The peak time for using taxi is 4pm~5pm. But by the taxi fare, the peak time is 3pm\~7pm.
 
 ## 3. Model Selection
 
@@ -536,21 +555,121 @@ importance(random_forest)
 
 ```{r}
 regfit.full <- regsubsets(Fare ~ ., data = selected_taxi_df)
-summary(regfit.full)
+reg.summary <- summary(regfit.full)
+print(reg.summary)
 ```
-
-
-### 3. Fare prediction using Splines
 
 ```{r}
+highest_point <- which.max(reg.summary$adjr2)
 
+plot(reg.summary$adjr2, xlab = "Number of Variables",
+    ylab = "Adjusted RSq", type = "l")
+points(highest_point, reg.summary$adjr2[highest_point], col = "red", cex = 2, 
+    pch = 20)
 ```
-
-### 3. Fare prediction using SVM
 
 ```{r}
-
+plot(reg.summary$cp, xlab = "Number of Variables", ylab = "Cp", type = "l")
+lowest_point <- which.min(reg.summary$cp)
+points(lowest_point, reg.summary$cp[lowest_point], col = "red", cex = 2, pch = 20)
 ```
+
+As we see from the Adjusted R2 and Cp graphs, we would have the best performance on using all the 6 features. The individual importance of these features was calculated using the random forests where we found that Trip.Miles & Trip.Hour.Of.The.Day having the highest % Increase in MSE if not included while Trip.Miles & Trip.Minutes contributed the most to the increases in Node purities of the decision trees when used to split. 
+
+### 3.3 Fare prediction using Linear models with Lasso & Ridge
+```{r}
+set.seed(123)
+
+trainIndex <- createDataPartition(selected_taxi_df$Fare, p = 0.6, list = FALSE)
+train_set <- selected_taxi_df[trainIndex,]
+test_set <- selected_taxi_df[-trainIndex,]
+
+cat("Training:", dim(train_set), "Testing:", dim(test_set))
+```
+
+```{r}
+x_train <- model.matrix(Fare ~ .-1, data = train_set)
+y_train <- train_set$Fare
+
+x_test <- model.matrix(Fare ~ .-1, data = test_set)
+y_test <- test_set$Fare
+```
+
+```{r}
+grid <- 10^seq(10, -2, length = 100)
+cv_ridge_fit <- cv.glmnet(x_train, y_train, alpha = 0, lambda = grid)
+cat("Min value for lambda(Ridge):", cv_ridge_fit$lambda.min)
+
+plot(cv_ridge_fit)
+title("Cross-Validation Lambda value for Ridge", line = 2.5)
+```
+
+```{r}
+grid <- 10^seq(10, -2, length = 100)
+cv_lasso_fit <- cv.glmnet(x_train, y_train, alpha = 1, lambda = grid)
+cat("Min value for lambda(lasso):", cv_lasso_fit$lambda.min)
+
+plot(cv_lasso_fit)
+title("Cross-Validation Lambda value for lasso", line = 2.5)
+```
+
+```{r}
+lasso_model <- glmnet(x_train, y_train, alpha = 1, lambda = cv_lasso_fit$lambda.min)
+ridge_model <- glmnet(x_train, y_train, alpha = 0, lambda = cv_ridge_fit$lambda.min)
+
+predicted_fare_lasso <- predict(lasso_model, newx = x_test)
+predicted_fare_ridge <- predict(ridge_model, newx = x_test)
+```
+
+```{r}
+mse_lasso <- mean((y_test - predicted_fare_lasso)^2)
+print(paste("Lasso Model - Mean Squared Error (MSE):", mse_lasso))
+
+mse_ridge <- mean((y_test - predicted_fare_ridge)^2)
+print(paste("Ridge Model - Mean Squared Error (MSE):", mse_ridge))
+```
+
+```{r}
+mae_lasso <- mean(abs(y_test - predicted_fare_lasso))
+print(paste("Lasso Model - Mean Absolute Error (mae):", mae_lasso))
+
+mae_ridge <- mean(abs(y_test - predicted_fare_ridge))
+print(paste("Ridge Model - Mean Absolute Error (mae):", mae_ridge))
+```
+
+### 3.4 Fare prediction using Splines
+```{r}
+smooth_spline <- lm(Fare ~ bs(Trip.Miles) + bs(Pickup.Community.Area) + bs(Dropoff.Community.Area) + bs(Trip.Minutes) + bs(Trip.Hour.Of.The.Day) + bs(Trip.Day.Of.The.Week), data = train_set)
+summary(smooth_spline)
+```
+
+```{r}
+predicted_fare <- predict(smooth_spline, newdata = test_set)
+
+mse <- mean((test_set$Fare - predicted_fare)^2)
+print(paste("Mean Squared Error (MSE):", mse))
+
+mae <- mean(abs(test_set$Fare - predicted_fare))
+print(paste("Mean Absolute Error (MAE):", mae))
+
+rmse <- sqrt(mse)
+print(paste("Root Mean Squared Error (RMSE):", rmse))
+```
+
+```{r}
+train_predicted_fare <- predict(smooth_spline, newdata = train_set)
+residuals <- residuals(smooth_spline)
+
+plot_data <- data.frame(Predicted = train_predicted_fare, Residuals = residuals)
+
+ggplot(plot_data, aes(x = Predicted, y = Residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  theme_minimal() +
+  labs(title = "Residual Plot", x = "Predicted Fare", y = "Residuals")
+```
+
+As we see from the test set results, smoothing splines with an error of (+,-)$3.5 perform better than the linear models of lasso & ridge with an error of (+,-)$3.9. But the residual analysis of the smoothing splines show that the residuals might be following a particular pattern as they all fall in a certain region.
 
 ### 3. Tip chances using Distance Trees
 
