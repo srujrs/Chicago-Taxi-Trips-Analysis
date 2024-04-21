@@ -640,6 +640,26 @@ mae_ridge <- mean(abs(y_test - predicted_fare_ridge))
 print(paste("Ridge Model - Mean Absolute Error (mae):", mae_ridge))
 ```
 
+```{r}
+df_lasso <- data.frame(Actual = y_test, Prediction = c(predicted_fare_lasso))
+ggplot(df_lasso, aes(x = Actual, y = Prediction)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  ggtitle("Lasso: Predicted vs Actual Values") +
+  xlab("Actual Values") +
+  ylab("Predicted Values")
+```
+
+```{r}
+df_ridge <- data.frame(Actual = y_test, Prediction = c(predicted_fare_ridge))
+ggplot(df_ridge, aes(x = Actual, y = Prediction)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  ggtitle("Ridge: Predicted vs Actual Values") +
+  xlab("Actual Values") +
+  ylab("Predicted Values")
+```
+
 ### 3.4 Fare prediction using Splines
 ```{r}
 smooth_spline <- lm(Fare ~ bs(Trip.Miles) + bs(Pickup.Community.Area) + bs(Dropoff.Community.Area) + bs(Trip.Minutes) + bs(Trip.Hour.Of.The.Day) + bs(Trip.Day.Of.The.Week), data = train_set)
@@ -672,9 +692,19 @@ ggplot(plot_data, aes(x = Predicted, y = Residuals)) +
   labs(title = "Residual Plot", x = "Predicted Fare", y = "Residuals")
 ```
 
+```{r}
+df_splines <- data.frame(Actual = test_set$Fare, Predicted = predicted_fare)
+ggplot(df_splines, aes(x = Actual, y = Predicted)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  ggtitle("Smoothing Splines: Predicted vs Actual Values") +
+  xlab("Actual Values") +
+  ylab("Predicted Values")
+```
+
 As we see from the test set results, smoothing splines with an error of (+,-)$3.5 perform better than the linear models of lasso & ridge with an error of (+,-)$3.9. But the residual analysis of the smoothing splines show that the residuals might be following a particular pattern as they all fall in a certain region.
 
-### 3. Tipping analysis using Clustering
+### 3. Tipping analysis
 ```{r}
 features_to_drop <- c('Trip.ID', 'Taxi.ID', 'Trip.Start.Timestamp', 'Trip.Start.Date', 'Payment.Type', 'Company', 'Tolls', 'Extras', 'Trip.Total')
 selected_taxi_df <- cleaned_taxi_df %>% select(-one_of(features_to_drop))
