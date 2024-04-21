@@ -123,13 +123,12 @@ head(cleaned_taxi_df)
 ### 1.4 Converting timestamp to hour of the day & day of the week
 
 ```{r}
-cleaned_taxi_df$Trip.Start.Timestamp <- as.POSIXct(cleaned_taxi_df$Trip.Start.Timestamp, 
-                                                    format = "%m/%d/%Y %I:%M:%S %p")
+#cleaned_taxi_df$Trip.Start.Timestamp <- as.POSIXct(cleaned_taxi_df$Trip.Start.Timestamp, format = "%m/%d/%Y %I:%M:%S %p")
 
 # ---------------------------------------------------------------------------------
 # If you are facing any errors with the format used above, try using the one below 
 # ---------------------------------------------------------------------------------
-# cleaned_taxi_df$Trip.Start.Timestamp <- as.POSIXct(cleaned_taxi_df$Trip.Start.Timestamp, format = "%m/%d/%y %H:%M")
+cleaned_taxi_df$Trip.Start.Timestamp <- as.POSIXct(cleaned_taxi_df$Trip.Start.Timestamp, format = "%m/%d/%y %H:%M")
 
 
 cleaned_taxi_df$Trip.Start.Date <- as.Date(cleaned_taxi_df$Trip.Start.Timestamp)
@@ -172,6 +171,10 @@ head(cleaned_taxi_df)
 saveRDS(cleaned_taxi_df, "taxi_df_data_cleaning.rds")
 ```
 
+```{r}
+summary(cleaned_taxi_df)
+```
+
 
 ## 2. Exploratory Data Analysis
 
@@ -183,8 +186,16 @@ attach(cleaned_taxi_df)
 ```
 
 ```{r}
-hist(Trip.Total, breaks = 50, main = "Histogram of Total fare", xlab = "Total Fare")
-summary(Trip.Total)
+summary(cleaned_taxi_df)
+```
+```{r}
+dim(cleaned_taxi_df)
+```
+
+
+```{r}
+hist(Fare, breaks = 50, main = "Histogram of Total fare", xlab = "Total Fare")
+summary(Fare)
 ```
 
 Looking at the histogram and the boxplot, there are some extreme values that hinders accuracy of our future model, hence needs to be removed.
@@ -209,15 +220,51 @@ outliers <- is.outlier(Trip.Total)
 number of outliers
 
 ```{r}
-sum(outliers)
-```
+# Define the function to detect outliers for a single column
+is.outlier <- function(x) {
+  iqr <- IQR(x, na.rm = TRUE)
+  lower <- quantile(x, 0.25, na.rm = TRUE) - 1.5 * iqr
+  upper <- quantile(x, 0.75, na.rm = TRUE) + 1.5 * iqr
+  return(x < lower | x > upper)
+}
 
-Remove all the rows that are outliers of Trip.Total
+# List of numerical columns to check for outliers
+numerical_cols <- c("Fare", "Tips", "Tolls", "Extras", "Trip.Total", "Trip.Minutes", "Trip.Miles")
+
+# Initialize a logical vector to store the rows to keep (no outliers)
+rows_to_keep <- rep(TRUE, nrow(cleaned_taxi_df))
+
+# Initialize a vector to store the count of outliers for each feature
+outlier_counts <- numeric(length(numerical_cols))
+names(outlier_counts) <- numerical_cols
+
+# Loop through each numerical column
+for (col in numerical_cols) {
+  # Find the outliers in the column
+  outliers <- is.outlier(cleaned_taxi_df[[col]])
+  # Store the count of outliers for the feature
+  outlier_counts[col] <- sum(outliers)
+  rows_to_keep <- rows_to_keep & !outliers
+}
+
+cleaned_taxi_df <- cleaned_taxi_df[rows_to_keep, ]
+
+# Print the number of outliers for each feature
+print(outlier_counts)
+
+```
 
 ```{r}
-cleaned_taxi_df <- cleaned_taxi_df[!outliers, ]
 dim(cleaned_taxi_df)
 ```
+
+
+
+```{r}
+distance_features <- cleaned_taxi_df[, c('Trip.Miles')]
+boxplot(distance_features)
+```
+
 
 ### 2.2 Histrogram of each features
 
@@ -236,11 +283,18 @@ summary(cleaned_taxi_df$Extras)
 
 hist(cleaned_taxi_df$Trip.Total, breaks = 25, main = "Histogram of Trip.Total", xlab = "Trip.Total")
 summary(cleaned_taxi_df$Trip.Total)
+
+hist(cleaned_taxi_df$Trip.Miles, breaks = 25, main = "Histogram of Trip.Miles", xlab = "Trip.Miles")
+summary(cleaned_taxi_df$Trip.Miles)
 ```
 
 ```{r}
 boxplot(cleaned_taxi_df[, c('Fare','Tips','Tolls','Extras','Trip.Total')])
 ```
+```{r}
+boxplot(cleaned_taxi_df[, c('Trip.Miles')])
+```
+
 
 ### 2.3 Heatmap of correlation of each features
 
@@ -287,7 +341,7 @@ plot <- ggplot(average_trips_per_taxi, aes(x = Trip.Start.Date, y = AvgTrips)) +
   geom_line() +
   labs(title = "Average Number of Trips per Taxi in a Day Over Time",
        x = "Date",
-       y = "Average Trips per Taxi") +
+       y = " ") +
   theme_minimal()
 
 # Add vertical lines for weekends
@@ -313,7 +367,7 @@ total_trips_plot <- ggplot(total_trips_over_time, aes(x = Trip.Start.Date, y = T
   scale_y_continuous(labels = label_thousands) +
   labs(title = "Total Trips Over Time",
        x = "Date",
-       y = "Total Trips (in thousands)") +
+       y = " ") +
   theme_minimal()
 
 # Assuming weekend_dates is a vector that contains the dates of weekends
@@ -343,7 +397,7 @@ ggplot(area_data, aes(x = as.factor(Area), fill = AreaType)) +
   scale_y_continuous(labels = label_thousands) + # Format y-axis labels
   labs(title = "Overlaid Bar Chart of Pickup and Dropoff Area Counts",
        x = "Area Code",
-       y = "Count") +
+       y = " ") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   scale_fill_manual(values = c("Pickup.Community.Area" = "blue", "Dropoff.Community.Area" = "red"))
@@ -367,8 +421,8 @@ ggplot(trip_total_by_PaymentType, aes(x = Payment.Type, y = TotalRevenue, fill =
   geom_col() +  # This creates a bar chart with pre-summarized data
   scale_y_continuous(labels = label_millions) + # Use the custom label function for millions
   labs(title = "Taxi Fare by Payment Type",
-       x = "Payment Type",
-       y = "Taxi Fare") +
+       x = " ",
+       y = " ") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none")
 ```
@@ -389,9 +443,9 @@ ggplot(trip_total_by_DayoftheWeek, aes(x = Trip.Day.Of.The.Week, y = TotalRevenu
   geom_col() +
   scale_x_discrete(labels = day_names) +  # Use the day_names vector for axis labels
   scale_y_continuous(labels = label_millions) +
-  labs(title = "Trip Total by Day of the Week",
+  labs(title = "Taxi fare by Day of the Week",
        x = " ",
-       y = "Total Revenue") +
+       y = " ") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none")
 ```
@@ -419,9 +473,9 @@ trip_total_by_time <- cleaned_taxi_df %>%
 ggplot(trip_total_by_time, aes(x = Trip.Hour.Of.The.Day, y = TotalRevenue, fill = TotalRevenue)) +
   geom_col() +
   scale_y_continuous(labels = label_thousands) +
-  labs(title = "Trips total by time in a day",
+  labs(title = "Taxi fare by time in a day",
        x = "Time",
-       y = "Trips total") +
+       y = " ") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         legend.position = "none") +
@@ -441,8 +495,8 @@ ggplot(trip_count_by_PaymentType, aes(x = Payment.Type, y = TripCount, fill = Pa
   geom_col() +
   scale_y_continuous(labels = label_thousands) +
   labs(title = "Trips Count by Paymeny type",
-       x = "Payment Type",
-       y = "Trip Count") +
+       x = " ",
+       y = " ") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") 
 ```
@@ -463,9 +517,9 @@ ggplot(trip_count_by_DayoftheWeek, aes(x = Trip.Day.Of.The.Week, y = TripCount, 
   geom_col() +
   scale_x_discrete(labels = day_names) + 
   scale_y_continuous(labels = label_thousands) +
-  labs(title = "Trip Count by Day of the Week",
+  labs(title = "Trips Count by Day of the Week",
        x = " ",
-       y = "Trip Count") +
+       y = " ") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none")
 ```
@@ -480,7 +534,7 @@ trip_count_by_Company <- cleaned_taxi_df %>%
   arrange(desc(TripCount))
 
 # Display the full table sorted by Total Revenue
-kable(trip_count_by_Company, digits=2, col.names = c("Company", "Trips Count (In Thousands)"))
+kable(trip_count_by_Company, digits=2, col.names = c("Company", "Trips Count (Thousands $)"))
 ```
 
 #### 10) Trips Count by time in a day
@@ -497,7 +551,7 @@ ggplot(trip_count_by_time, aes(x = Trip.Hour.Of.The.Day, y = TripCount, fill = T
   scale_y_continuous(labels = label_thousands) +
   labs(title = "Trips Count by time in a day",
        x = "Time",
-       y = "Trip Count") +
+       y = " ") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         legend.position = "none") + 
@@ -725,44 +779,44 @@ summary(model)
 ```{r}
 # Plot for Trip.Miles vs Tips
 ggplot(selected_taxi_df, aes(x = Trip.Miles, y = Tips)) +
-  geom_point() +
-  geom_smooth(method = "lm", se = FALSE) +
+  geom_point() +  
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +  # Linear regression line
   labs(title = "Trip Miles vs Tips", x = "Trip Miles", y = "Tips")
 
 # Plot for Pickup.Community.Area vs Tips
 ggplot(selected_taxi_df, aes(x = Pickup.Community.Area, y = Tips)) +
   geom_point() +
-  geom_smooth(method = "lm", se = FALSE) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
   labs(title = "Pickup Community Area vs Tips", x = "Pickup Community Area", y = "Tips")
 
 # Plot for Dropoff.Community.Area vs Tips
 ggplot(selected_taxi_df, aes(x = Dropoff.Community.Area, y = Tips)) +
   geom_point() +
-  geom_smooth(method = "lm", se = FALSE) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
   labs(title = "Dropoff Community Area vs Tips", x = "Dropoff Community Area", y = "Tips")
 
 # Plot for Fare vs Tips
 ggplot(selected_taxi_df, aes(x = Fare, y = Tips)) +
   geom_point() +
-  geom_smooth(method = "lm", se = FALSE) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
   labs(title = "Fare vs Tips", x = "Fare", y = "Tips")
 
 # Plot for Trip.Minutes vs Tips
 ggplot(selected_taxi_df, aes(x = Trip.Minutes, y = Tips)) +
   geom_point() +
-  geom_smooth(method = "lm", se = FALSE) +
+  geom_smooth(method = "lm",formula = y ~ x, se = FALSE) +
   labs(title = "Trip Minutes vs Tips", x = "Trip Minutes", y = "Tips")
 
 # Plot for Trip.Hour.Of.The.Day vs Tips
 ggplot(selected_taxi_df, aes(x = Trip.Hour.Of.The.Day, y = Tips)) +
   geom_point() +
-  geom_smooth(method = "lm", se = FALSE) +
+  geom_smooth(method = "lm",formula = y ~ x, se = FALSE) +
   labs(title = "Trip Hour Of The Day vs Tips", x = "Trip Hour Of The Day", y = "Tips")
 
 # Plot for Trip.Day.Of.The.Week vs Tips
 ggplot(selected_taxi_df, aes(x = Trip.Day.Of.The.Week, y = Tips)) +
   geom_point() +
-  geom_smooth(method = "lm", se = FALSE) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
   labs(title = "Trip Day Of The Week vs Tips", x = "Trip Day Of The Week", y = "Tips")
 ```
 
