@@ -23,6 +23,9 @@ library(leaps)
 library(splines)
 library(caret)
 library(glmnet)
+library(tidyverse)
+library(cluster)
+library(factoextra)
 ```
 
 ## Loading & Checking Data
@@ -671,8 +674,65 @@ ggplot(plot_data, aes(x = Predicted, y = Residuals)) +
 
 As we see from the test set results, smoothing splines with an error of (+,-)$3.5 perform better than the linear models of lasso & ridge with an error of (+,-)$3.9. But the residual analysis of the smoothing splines show that the residuals might be following a particular pattern as they all fall in a certain region.
 
-### 3. Tip chances using Distance Trees
+### 3. Tipping analysis using Clustering
+```{r}
+features_to_drop <- c('Trip.ID', 'Taxi.ID', 'Trip.Start.Timestamp', 'Trip.Start.Date', 'Payment.Type', 'Company', 'Tolls', 'Extras', 'Trip.Total')
+selected_taxi_df <- cleaned_taxi_df %>% select(-one_of(features_to_drop))
+
+factor_columns <- sapply(selected_taxi_df, is.factor)
+selected_taxi_df[factor_columns] <- sapply(selected_taxi_df[factor_columns], function(x) as.numeric(levels(x))[x])
+```
 
 ```{r}
-
+summary(selected_taxi_df$Tips)
 ```
+
+```{r}
+model <- lm(Tips ~ ., data = selected_taxi_df)
+summary(model)
+```
+
+```{r}
+# Plot for Trip.Miles vs Tips
+ggplot(selected_taxi_df, aes(x = Trip.Miles, y = Tips)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Trip Miles vs Tips", x = "Trip Miles", y = "Tips")
+
+# Plot for Pickup.Community.Area vs Tips
+ggplot(selected_taxi_df, aes(x = Pickup.Community.Area, y = Tips)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Pickup Community Area vs Tips", x = "Pickup Community Area", y = "Tips")
+
+# Plot for Dropoff.Community.Area vs Tips
+ggplot(selected_taxi_df, aes(x = Dropoff.Community.Area, y = Tips)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Dropoff Community Area vs Tips", x = "Dropoff Community Area", y = "Tips")
+
+# Plot for Fare vs Tips
+ggplot(selected_taxi_df, aes(x = Fare, y = Tips)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Fare vs Tips", x = "Fare", y = "Tips")
+
+# Plot for Trip.Minutes vs Tips
+ggplot(selected_taxi_df, aes(x = Trip.Minutes, y = Tips)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Trip Minutes vs Tips", x = "Trip Minutes", y = "Tips")
+
+# Plot for Trip.Hour.Of.The.Day vs Tips
+ggplot(selected_taxi_df, aes(x = Trip.Hour.Of.The.Day, y = Tips)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Trip Hour Of The Day vs Tips", x = "Trip Hour Of The Day", y = "Tips")
+
+# Plot for Trip.Day.Of.The.Week vs Tips
+ggplot(selected_taxi_df, aes(x = Trip.Day.Of.The.Week, y = Tips)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Trip Day Of The Week vs Tips", x = "Trip Day Of The Week", y = "Tips")
+```
+
